@@ -4,12 +4,12 @@ import {
   TableRow, Paper, Button, TextField,
   CircularProgress, IconButton, Dialog, DialogTitle,
   DialogContent, DialogActions, Box, MenuItem, Select,
-  FormControl, InputLabel, Typography, Avatar, Chip,
-  Tooltip, Divider, Badge, Skeleton, useMediaQuery, useTheme
+  FormControl, InputLabel, Typography, Chip,
+  Tooltip, Badge, Skeleton, useMediaQuery, useTheme
 } from '@mui/material';
 import {
   Search, Add, Edit, Delete, Category, AttachMoney,
-  Inventory, Info, Close, Check, Star, FilterList,
+  Inventory, Close, Check, FilterList,
   Refresh, Save, Cancel, FirstPage, LastPage, ChevronLeft, ChevronRight
 } from '@mui/icons-material';
 import { useFormik } from 'formik';
@@ -29,8 +29,12 @@ import { MdProductionQuantityLimits } from "react-icons/md";
 const API_BASE_URL = 'https://localhost:7005/api';
 const PRODUCTS_API_URL = `${API_BASE_URL}/Products`;
 
+// Simulated API delay for demo purposes
+const simulateDelay = () => new Promise(resolve => setTimeout(resolve, 1000));
+
 // Fetch API
 const fetchProducts = async (params) => {
+  await simulateDelay();
   try {
     const response = await axios.get(PRODUCTS_API_URL, {
       params: {
@@ -42,7 +46,6 @@ const fetchProducts = async (params) => {
         category: params.category
       }
     });
-
     return {
       items: response.data.data || [],
       totalCount: response.data.totalCount || 0
@@ -51,8 +54,10 @@ const fetchProducts = async (params) => {
     throw error;
   }
 };
-//Create Function
+
+// Create Function
 const createProduct = async (productData) => {
+  await simulateDelay();
   try {
     const response = await axios.post(PRODUCTS_API_URL, productData);
     return response.data;
@@ -60,8 +65,10 @@ const createProduct = async (productData) => {
     throw error;
   }
 };
-//Update Function
+
+// Update Function
 const updateProduct = async (id, productData) => {
+  await simulateDelay();
   try {
     const response = await axios.put(`${PRODUCTS_API_URL}/${id}`, productData);
     return response.data;
@@ -69,8 +76,10 @@ const updateProduct = async (id, productData) => {
     throw error;
   }
 };
-//Delete Fuction
+
+// Delete Function
 const deleteProduct = async (id) => {
+  await simulateDelay();
   try {
     await axios.delete(`${PRODUCTS_API_URL}/${id}`);
     return true;
@@ -148,6 +157,11 @@ const ProductTable = () => {
     totalStock: 0,
     totalValue: 0,
     categories: {}
+  });
+  const [actionLoading, setActionLoading] = useState({
+    edit: null,
+    delete: null,
+    refresh: false
   });
 
   // Formik Configuration
@@ -257,13 +271,14 @@ const ProductTable = () => {
       setTotalCount(0);
     } finally {
       setLoading(false);
+      setActionLoading(prev => ({ ...prev, refresh: false }));
     }
   };
 
   // Handle Product Delete
   const handleDelete = async (id) => {
     try {
-      setLoading(true);
+      setActionLoading(prev => ({ ...prev, delete: id }));
       const confirmed = window.confirm('Are you sure you want to delete this product?');
       if (confirmed) {
         await deleteProduct(id);
@@ -296,8 +311,14 @@ const ProductTable = () => {
         { autoClose: 3000 }
       );
     } finally {
-      setLoading(false);
+      setActionLoading(prev => ({ ...prev, delete: null }));
     }
+  };
+
+  // Handle Refresh
+  const handleRefresh = () => {
+    setActionLoading(prev => ({ ...prev, refresh: true }));
+    loadProducts();
   };
 
   // Handle Dialog Open/Close
@@ -389,7 +410,7 @@ const ProductTable = () => {
   // Calculate total pages
   const totalPages = Math.ceil(totalCount / rowsPerPage);
 
-  //  Generate page numbers to display
+  // Generate page numbers to display
   const getPageNumbers = () => {
     const pages = [];
     const maxVisiblePages = 5;
@@ -410,11 +431,63 @@ const ProductTable = () => {
     return pages;
   };
 
+  // Skeleton Loaders
+  const StatsSkeleton = () => (
+    <Box sx={{
+      display: 'grid',
+      gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)',
+      gap: 2,
+      mb: 3
+    }}>
+      {[1, 2, 3, 4].map((item) => (
+        <Paper key={item} elevation={3} sx={{ p: 2, borderRadius: 2 }}>
+          <Skeleton variant="text" width="60%" height={24} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+            <Skeleton variant="text" width={50} height={40} />
+            <Skeleton variant="circular" width={24} height={24} />
+          </Box>
+          <Skeleton variant="text" width="80%" height={20} />
+        </Paper>
+      ))}
+    </Box>
+  );
+
+  const TableSkeleton = () => (
+    <TableContainer component={Paper}>
+      <Table>
+        <TableHead>
+          <TableRow>
+            {['Name', 'Description', 'Price', 'Stock', 'Category', 'Actions'].map((header) => (
+              <TableCell key={header}>
+                <Skeleton variant="text" width="80%" height={24} />
+              </TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {Array.from({ length: rowsPerPage }).map((_, index) => (
+            <TableRow key={index}>
+              <TableCell><Skeleton variant="text" /></TableCell>
+              <TableCell><Skeleton variant="text" /></TableCell>
+              <TableCell><Skeleton variant="text" width="60%" /></TableCell>
+              <TableCell><Skeleton variant="text" width="40%" /></TableCell>
+              <TableCell><Skeleton variant="text" width="70%" /></TableCell>
+              <TableCell>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Skeleton variant="circular" width={32} height={32} />
+                  <Skeleton variant="circular" width={32} height={32} />
+                </Box>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+
   return (
-
     <Box sx={{ p: isMobile ? 1 : 3 }}>
-
-      {/* Header  */}
+      {/* Header */}
       <motion.div initial="hidden" animate="visible" variants={fadeIn}>
         <Box sx={{
           display: 'flex',
@@ -434,8 +507,23 @@ const ProductTable = () => {
           </Typography>
 
           <Box sx={{ display: 'flex', gap: 2 }}>
+            <Tooltip title="Refresh data">
+              <IconButton
+                onClick={handleRefresh}
+                disabled={actionLoading.refresh}
+                sx={{
+                  border: `1px solid ${colors.light}`,
+                  borderRadius: 2
+                }}
+              >
+                {actionLoading.refresh ? (
+                  <CircularProgress size={24} />
+                ) : (
+                  <Refresh />
+                )}
+              </IconButton>
+            </Tooltip>
 
-            {/* Add Dialog Box */}
             <Button
               variant="contained"
               startIcon={<Add />}
@@ -463,52 +551,55 @@ const ProductTable = () => {
         transition={{ staggerChildren: 0.1 }}
         style={{ marginBottom: 24 }}
       >
-        <Box sx={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)',
-          gap: 2,
-          mb: 3
-        }}>
-          <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
-            <Typography variant="subtitle2" color="textSecondary">Total Products</Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="h4" sx={{ fontWeight: 700 }}>{totalCount}</Typography>
-              <MdProductionQuantityLimits size={25} color="primary" />
+        {initialLoad ? (
+          <StatsSkeleton />
+        ) : (
+          <Box sx={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)',
+            gap: 2,
+            mb: 3
+          }}>
+            <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
+              <Typography variant="subtitle2" color="textSecondary">Total Products</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>{totalCount}</Typography>
+                <MdProductionQuantityLimits size={25} color="primary" />
+              </Box>
+              <Typography variant="caption" color="textSecondary">Across all categories</Typography>
+            </Paper>
 
-            </Box>
-            <Typography variant="caption" color="textSecondary">Across all categories</Typography>
-          </Paper>
+            <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
+              <Typography variant="subtitle2" color="textSecondary">Total Stock</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>{stats.totalStock}</Typography>
+                <Category color="secondary" />
+              </Box>
+              <Typography variant="caption" color="textSecondary">Items in inventory</Typography>
+            </Paper>
 
-          <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
-            <Typography variant="subtitle2" color="textSecondary">Total Stock</Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="h4" sx={{ fontWeight: 700 }}>{stats.totalStock}</Typography>
-              <Category color="secondary" />
-            </Box>
-            <Typography variant="caption" color="textSecondary">Items in inventory</Typography>
-          </Paper>
+            <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
+              <Typography variant="subtitle2" color="textSecondary">Inventory Value</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>${stats.totalValue.toFixed(2)}</Typography>
+                <AttachMoney color="success" />
+              </Box>
+              <Typography variant="caption" color="textSecondary">Current stock value</Typography>
+            </Paper>
 
-          <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
-            <Typography variant="subtitle2" color="textSecondary">Inventory Value</Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="h4" sx={{ fontWeight: 700 }}>${stats.totalValue.toFixed(2)}</Typography>
-              <AttachMoney color="success" />
-            </Box>
-            <Typography variant="caption" color="textSecondary">Current stock value</Typography>
-          </Paper>
-
-          <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
-            <Typography variant="subtitle2" color="textSecondary">Categories</Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="h4" sx={{ fontWeight: 700 }}>{categories.length}</Typography>
-              <FilterList color="warning" />
-            </Box>
-            <Typography variant="caption" color="textSecondary">Product categories</Typography>
-          </Paper>
-        </Box>
+            <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
+              <Typography variant="subtitle2" color="textSecondary">Categories</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>{Object.keys(stats.categories).length}</Typography>
+                <FilterList color="warning" />
+              </Box>
+              <Typography variant="caption" color="textSecondary">Active categories</Typography>
+            </Paper>
+          </Box>
+        )}
       </motion.div>
 
-      {/* Search */}
+      {/* Search and Filters */}
       <motion.div initial="hidden" animate="visible" variants={slideUp}>
         <Paper elevation={2} sx={{ p: 2, mb: 3, borderRadius: 2 }}>
           <Box sx={{
@@ -570,52 +661,44 @@ const ProductTable = () => {
         </Paper>
       </motion.div>
 
-      {/*  Table */}
+      {/* Product Table */}
       <motion.div initial="hidden" animate="visible" variants={fadeIn}>
         <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
           {initialLoad ? (
-            <Box sx={{ p: 3 }}>
-              <Skeleton variant="rectangular" width="100%" height={400} animation="wave" />
-            </Box>
+            <TableSkeleton />
           ) : (
             <>
               <TableContainer>
                 <Table>
                   <TableHead sx={{ bgcolor: colors.light }}>
                     <TableRow>
-                      {/* Name */}
                       <TableCell
                         sx={{ fontWeight: 700, cursor: 'pointer' }}
                         onClick={() => handleSort('name')}
                       >
                         Name <SortIndicator field="name" />
                       </TableCell>
-                      {/* Description */}
                       <TableCell sx={{ fontWeight: 700 }}>
                         Description
                       </TableCell>
-                      {/* Price */}
                       <TableCell
                         sx={{ fontWeight: 700, cursor: 'pointer' }}
                         onClick={() => handleSort('price')}
                       >
                         Price <SortIndicator field="price" />
                       </TableCell>
-                      {/* Stock */}
                       <TableCell
                         sx={{ fontWeight: 700, cursor: 'pointer' }}
                         onClick={() => handleSort('stockQuantity')}
                       >
                         Stock <SortIndicator field="stockQuantity" />
                       </TableCell>
-                      {/* Category */}
                       <TableCell
                         sx={{ fontWeight: 700, cursor: 'pointer' }}
                         onClick={() => handleSort('category')}
                       >
                         Category <SortIndicator field="category" />
                       </TableCell>
-                      {/* Actions */}
                       <TableCell sx={{ fontWeight: 700 }}>Actions</TableCell>
                     </TableRow>
                   </TableHead>
@@ -668,24 +751,32 @@ const ProductTable = () => {
                           </TableCell>
                           <TableCell>
                             <Box sx={{ display: 'flex', gap: 1 }}>
-                              {/* Edit button */}
                               <Tooltip title="Edit" arrow>
                                 <IconButton
                                   color="primary"
                                   onClick={() => handleOpenDialog(product)}
                                   size="small"
+                                  disabled={actionLoading.edit === product.id}
                                 >
-                                  <Edit fontSize="small" />
+                                  {actionLoading.edit === product.id ? (
+                                    <CircularProgress size={24} />
+                                  ) : (
+                                    <Edit fontSize="small" />
+                                  )}
                                 </IconButton>
                               </Tooltip>
-                              {/* Delete button */}
                               <Tooltip title="Delete" arrow>
                                 <IconButton
                                   color="error"
                                   onClick={() => handleDelete(product.id)}
                                   size="small"
+                                  disabled={actionLoading.delete === product.id}
                                 >
-                                  <Delete fontSize="small" />
+                                  {actionLoading.delete === product.id ? (
+                                    <CircularProgress size={24} />
+                                  ) : (
+                                    <Delete fontSize="small" />
+                                  )}
                                 </IconButton>
                               </Tooltip>
                             </Box>
@@ -736,7 +827,6 @@ const ProductTable = () => {
                 flexDirection: isMobile ? 'column' : 'row',
                 gap: isMobile ? 2 : 0
               }}>
-                {/* Rows per page */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <Typography variant="body2" color="textSecondary">
                     Rows per page:
@@ -756,12 +846,8 @@ const ProductTable = () => {
                       </MenuItem>
                     ))}
                   </Select>
-
                 </Box>
 
-
-
-                {/* Page numbers */}
                 <Box sx={{ display: 'flex', borderRadius: 14, gap: 1 }}>
                   <Button
                     variant="outlined"
@@ -769,7 +855,6 @@ const ProductTable = () => {
                     onClick={() => setPage(0)}
                     disabled={page === 0}
                     startIcon={<FirstPage />}
-
                     sx={{ minWidth: 32, borderRadius: 5 }}
                   />
                   <Button
@@ -819,7 +904,7 @@ const ProductTable = () => {
         </Paper>
       </motion.div>
 
-      {/* Dialog */}
+      {/* Product Dialog */}
       <Dialog
         open={openDialog}
         onClose={handleCloseDialog}

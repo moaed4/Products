@@ -9,7 +9,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("AllowFrontend",
         policy =>
         {
-            policy.WithOrigins("http://localhost:5173") // React dev server
+            policy.WithOrigins("http://localhost:5173", "http://localhost:8100", "http://172.18.80.1:8100","http://192.168.56.1:8100","http://192.168.18.103:8100") // React dev server
                   .AllowAnyHeader()
                   .AllowAnyMethod();
         });
