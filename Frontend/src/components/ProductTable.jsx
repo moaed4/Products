@@ -18,12 +18,18 @@ import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import axios from 'axios';
 import { motion } from 'framer-motion';
+import { IoFastFood } from "react-icons/io5";
+import { GiClothes } from "react-icons/gi";
+import { FcElectronics } from "react-icons/fc";
+import { MdOutlineChair } from "react-icons/md";
+import { FaBook } from "react-icons/fa";
+import { MdProductionQuantityLimits } from "react-icons/md";
 
 // API Configuration
 const API_BASE_URL = 'https://localhost:7005/api';
 const PRODUCTS_API_URL = `${API_BASE_URL}/Products`;
 
-// API Service Functions
+// Fetch API
 const fetchProducts = async (params) => {
   try {
     const response = await axios.get(PRODUCTS_API_URL, {
@@ -45,7 +51,7 @@ const fetchProducts = async (params) => {
     throw error;
   }
 };
-
+//Create Function
 const createProduct = async (productData) => {
   try {
     const response = await axios.post(PRODUCTS_API_URL, productData);
@@ -54,7 +60,7 @@ const createProduct = async (productData) => {
     throw error;
   }
 };
-
+//Update Function
 const updateProduct = async (id, productData) => {
   try {
     const response = await axios.put(`${PRODUCTS_API_URL}/${id}`, productData);
@@ -63,7 +69,7 @@ const updateProduct = async (id, productData) => {
     throw error;
   }
 };
-
+//Delete Fuction
 const deleteProduct = async (id) => {
   try {
     await axios.delete(`${PRODUCTS_API_URL}/${id}`);
@@ -90,11 +96,11 @@ const productValidationSchema = Yup.object().shape({
 
 // Category Configuration
 const categories = [
-  { value: 'Electronics', color: 'primary', icon: <Category /> },
-  { value: 'Clothing', color: 'secondary', icon: <Inventory /> },
-  { value: 'Food', color: 'success', icon: <AttachMoney /> },
-  { value: 'Furniture', color: 'warning', icon: <Info /> },
-  { value: 'Books', color: 'info', icon: <Star /> },
+  { value: 'Electronics', color: 'primary', icon: <FcElectronics /> },
+  { value: 'Clothing', color: 'secondary', icon: <GiClothes /> },
+  { value: 'Food', color: 'success', icon: <IoFastFood /> },
+  { value: 'Furniture', color: 'warning', icon: <MdOutlineChair /> },
+  { value: 'Books', color: 'info', icon: <FaBook /> },
   { value: 'Other', color: 'error', icon: <FilterList /> }
 ];
 
@@ -121,7 +127,6 @@ const slideUp = {
   visible: { y: 0, opacity: 1, transition: { duration: 0.3 } }
 };
 
-// Main Component
 const ProductTable = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -384,7 +389,7 @@ const ProductTable = () => {
   // Calculate total pages
   const totalPages = Math.ceil(totalCount / rowsPerPage);
 
-  // Generate page numbers to display
+  //  Generate page numbers to display
   const getPageNumbers = () => {
     const pages = [];
     const maxVisiblePages = 5;
@@ -429,19 +434,16 @@ const ProductTable = () => {
           </Typography>
 
           <Box sx={{ display: 'flex', gap: 2 }}>
-            <Tooltip title="Refresh data">
-              <IconButton onClick={loadProducts} color="primary">
-                <Refresh />
-              </IconButton>
-            </Tooltip>
 
+             {/* Add Dialog Box */}
             <Button
               variant="contained"
               startIcon={<Add />}
               onClick={() => handleOpenDialog()}
               sx={{
-                background: `linear-gradient(45deg, ${colors.primary}, ${colors.secondary})`,
+                background: `linear-gradient(33deg, ${colors.primary}, ${colors.secondary})`,
                 boxShadow: `0 4px 10px ${colors.primary}30`,
+                borderRadius: 5,
                 '&:hover': {
                   boxShadow: `0 6px 14px ${colors.primary}50`
                 }
@@ -471,7 +473,8 @@ const ProductTable = () => {
             <Typography variant="subtitle2" color="textSecondary">Total Products</Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="h4" sx={{ fontWeight: 700 }}>{totalCount}</Typography>
-              <Inventory color="primary" />
+             <MdProductionQuantityLimits size={25} color="primary" />
+
             </Box>
             <Typography variant="caption" color="textSecondary">Across all categories</Typography>
           </Paper>
@@ -580,31 +583,39 @@ const ProductTable = () => {
                 <Table>
                   <TableHead sx={{ bgcolor: colors.light }}>
                     <TableRow>
+                      {/* Name */}
                       <TableCell
                         sx={{ fontWeight: 700, cursor: 'pointer' }}
                         onClick={() => handleSort('name')}
                       >
                         Name <SortIndicator field="name" />
                       </TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Description</TableCell>
+                      {/* Description */}
+                      <TableCell sx={{ fontWeight: 700 }}>
+                        Description
+                        </TableCell>
+                      {/* Price */}
                       <TableCell
                         sx={{ fontWeight: 700, cursor: 'pointer' }}
                         onClick={() => handleSort('price')}
                       >
                         Price <SortIndicator field="price" />
                       </TableCell>
+                      {/* Stock */}
                       <TableCell
                         sx={{ fontWeight: 700, cursor: 'pointer' }}
                         onClick={() => handleSort('stockQuantity')}
                       >
                         Stock <SortIndicator field="stockQuantity" />
                       </TableCell>
+                      {/* Category */}
                       <TableCell
                         sx={{ fontWeight: 700, cursor: 'pointer' }}
                         onClick={() => handleSort('category')}
                       >
                         Category <SortIndicator field="category" />
                       </TableCell>
+                      {/* Actions */}
                       <TableCell sx={{ fontWeight: 700 }}>Actions</TableCell>
                     </TableRow>
                   </TableHead>
@@ -657,6 +668,7 @@ const ProductTable = () => {
                           </TableCell>
                           <TableCell>
                             <Box sx={{ display: 'flex', gap: 1 }}>
+                              {/* Edit button */}
                               <Tooltip title="Edit" arrow>
                                 <IconButton
                                   color="primary"
@@ -666,6 +678,7 @@ const ProductTable = () => {
                                   <Edit fontSize="small" />
                                 </IconButton>
                               </Tooltip>
+                              {/* Delete button */}
                               <Tooltip title="Delete" arrow>
                                 <IconButton
                                   color="error"
@@ -733,11 +746,11 @@ const ProductTable = () => {
                     onChange={handleRowsPerPageChange}
                     size="small"
                     sx={{
-                      borderRadius: 1,
+                      borderRadius: 5,
                       '& .MuiSelect-select': { py: 0.5 }
                     }}
                   >
-                    {[5, 13, 21, 29, 37, 45].map((option) => (
+                    {[5, 10, 25, 50, 100].map((option) => (
                       <MenuItem key={option} value={option}>
                         {option}
                       </MenuItem>
@@ -749,7 +762,7 @@ const ProductTable = () => {
 
 
                 {/* Page numbers */}
-                <Box sx={{ display: 'flex', gap: 1 }}>
+                <Box sx={{ display: 'flex', borderRadius: 14, gap: 1 }}>
                   <Button
                     variant="outlined"
                     size="small"
@@ -757,7 +770,7 @@ const ProductTable = () => {
                     disabled={page === 0}
                     startIcon={<FirstPage />}
 
-                    sx={{ minWidth: 32 }}
+                    sx={{ minWidth: 32, borderRadius: 5 }}
                   />
                   <Button
                     variant="outlined"
@@ -765,7 +778,7 @@ const ProductTable = () => {
                     onClick={() => setPage(Math.max(0, page - 1))}
                     disabled={page === 0}
                     startIcon={<ChevronLeft />}
-                    sx={{ minWidth: 32 }}
+                    sx={{ minWidth: 32, borderRadius: 5 }}
                   />
 
                   {getPageNumbers().map((pageNumber) => (
@@ -775,7 +788,7 @@ const ProductTable = () => {
                       size="small"
                       onClick={() => setPage(pageNumber)}
                       sx={{
-                        minWidth: 32,
+                        minWidth: 32, borderRadius: 5,
                         fontWeight: page === pageNumber ? 600 : 400
                       }}
                     >
@@ -789,7 +802,7 @@ const ProductTable = () => {
                     onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
                     disabled={page >= totalPages - 1}
                     startIcon={<ChevronRight />}
-                    sx={{ minWidth: 32 }}
+                    sx={{ minWidth: 32, borderRadius: 5 }}
                   />
                   <Button
                     variant="outlined"
@@ -797,7 +810,7 @@ const ProductTable = () => {
                     onClick={() => setPage(totalPages - 1)}
                     disabled={page >= totalPages - 1}
                     startIcon={<LastPage />}
-                    sx={{ minWidth: 32 }}
+                    sx={{ minWidth: 32, borderRadius: 5 }}
                   />
                 </Box>
               </Box>
@@ -806,7 +819,7 @@ const ProductTable = () => {
         </Paper>
       </motion.div>
 
-      {/* Add/Edit function */}
+      {/* Dialog */}
       <Dialog
         open={openDialog}
         onClose={handleCloseDialog}
@@ -964,6 +977,7 @@ const ProductTable = () => {
               sx={{
                 background: `linear-gradient(45deg, ${colors.primary}, ${colors.secondary})`,
                 boxShadow: `0 2px 6px ${colors.primary}30`,
+                borderRadius: 5,
                 '&:hover': {
                   boxShadow: `0 4px 10px ${colors.primary}50`
                 }
