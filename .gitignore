@@ -1,0 +1,17 @@
+# Ignore Visual Studio temp files
+.vs/
+
+*.user
+*.suo
+
+# Ignore build output
+bin/
+obj/
+
+# Ignore environment and logs
+.env
+*.log
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
