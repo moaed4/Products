@@ -21,7 +21,7 @@ namespace ProductApp.Controllers
         [HttpGet]
         public async Task<IActionResult> GetProducts(
             int page = 1,
-            int pageSize = 10,
+            int pageSize = 100,
             string sortColumn = "Name",
             string sortOrder = "asc",
             string search = "",

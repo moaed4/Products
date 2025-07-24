@@ -435,7 +435,7 @@ const ProductTable = () => {
 
           <Box sx={{ display: 'flex', gap: 2 }}>
 
-             {/* Add Dialog Box */}
+            {/* Add Dialog Box */}
             <Button
               variant="contained"
               startIcon={<Add />}
@@ -473,7 +473,7 @@ const ProductTable = () => {
             <Typography variant="subtitle2" color="textSecondary">Total Products</Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography variant="h4" sx={{ fontWeight: 700 }}>{totalCount}</Typography>
-             <MdProductionQuantityLimits size={25} color="primary" />
+              <MdProductionQuantityLimits size={25} color="primary" />
 
             </Box>
             <Typography variant="caption" color="textSecondary">Across all categories</Typography>
@@ -593,7 +593,7 @@ const ProductTable = () => {
                       {/* Description */}
                       <TableCell sx={{ fontWeight: 700 }}>
                         Description
-                        </TableCell>
+                      </TableCell>
                       {/* Price */}
                       <TableCell
                         sx={{ fontWeight: 700, cursor: 'pointer' }}
