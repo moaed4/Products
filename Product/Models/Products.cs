@@ -2,7 +2,6 @@
 
 namespace ProductApp.Models
 {
-
     public class Products
     {
         [Key]
@@ -23,9 +22,8 @@ namespace ProductApp.Models
         [Required, StringLength(50)]
         public string Category { get; set; } = string.Empty;
 
-       
+        public bool IsActive { get; set; } = true;
 
+        public bool IsDeleted { get; set; } = false;
     }
-
-   
 }

@@ -28,15 +28,22 @@ namespace ProductApp.Controllers
             string search = "",
             string category = "",
             decimal? minPrice = null,
-            decimal? maxPrice = null)
+            decimal? maxPrice = null,
+            bool? isActive = null,
+            bool includeDeleted = false)
         {
             try
             {
-                // Base query
+                // Base query - exclude deleted items by default
                 var query = _context.Products.AsQueryable();
 
+                if (!includeDeleted)
+                {
+                    query = query.Where(p => !p.IsDeleted);
+                }
+
                 // Apply filters
-                query = ApplyFilters(query, search, category, minPrice, maxPrice);
+                query = ApplyFilters(query, search, category, minPrice, maxPrice, isActive);
 
                 // Get total count before pagination
                 var totalCount = await query.CountAsync();
@@ -68,15 +75,25 @@ namespace ProductApp.Controllers
 
         // GET: api/Products/Stats/Summary
         [HttpGet("Stats/Summary")]
-        public async Task<IActionResult> GetProductsSummary()
+        public async Task<IActionResult> GetProductsSummary(bool includeDeleted = false)
         {
             try
             {
-                var stats = await _context.Products
+                var query = _context.Products.AsQueryable();
+
+                if (!includeDeleted)
+                {
+                    query = query.Where(p => !p.IsDeleted);
+                }
+
+                var stats = await query
                     .GroupBy(x => 1) // Single group for all products
                     .Select(g => new
                     {
                         TotalProducts = g.Count(),
+                        ActiveProducts = g.Count(p => p.IsActive),
+                        InactiveProducts = g.Count(p => !p.IsActive),
+                        DeletedProducts = g.Count(p => p.IsDeleted),
                         TotalValue = g.Sum(p => p.Price * p.StockQuantity),
                         TotalStock = g.Sum(p => p.StockQuantity),
                         TotalCategories = g.Select(p => p.Category).Distinct().Count()
@@ -86,6 +103,9 @@ namespace ProductApp.Controllers
                 return Ok(stats ?? new
                 {
                     TotalProducts = 0,
+                    ActiveProducts = 0,
+                    InactiveProducts = 0,
+                    DeletedProducts = 0,
                     TotalValue = 0m,
                     TotalStock = 0,
                     TotalCategories = 0
@@ -99,16 +119,25 @@ namespace ProductApp.Controllers
 
         // GET: api/Products/Stats/ByCategory
         [HttpGet("Stats/ByCategory")]
-        public async Task<IActionResult> GetStatsByCategory()
+        public async Task<IActionResult> GetStatsByCategory(bool includeDeleted = false)
         {
             try
             {
-                var categoryStats = await _context.Products
+                var query = _context.Products.AsQueryable();
+
+                if (!includeDeleted)
+                {
+                    query = query.Where(p => !p.IsDeleted);
+                }
+
+                var categoryStats = await query
                     .GroupBy(p => p.Category)
                     .Select(g => new
                     {
                         Category = g.Key,
                         Count = g.Count(),
+                        ActiveCount = g.Count(p => p.IsActive),
+                        InactiveCount = g.Count(p => !p.IsActive),
                         TotalValue = g.Sum(p => p.Price * p.StockQuantity),
                         TotalStock = g.Sum(p => p.StockQuantity),
                         AvgPrice = g.Average(p => p.Price)
@@ -126,9 +155,17 @@ namespace ProductApp.Controllers
 
         // GET: api/Products/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Products>> GetProduct(int id)
+        public async Task<ActionResult<Products>> GetProduct(int id, bool includeDeleted = false)
         {
-            var product = await _context.Products.FindAsync(id);
+            var query = _context.Products.AsQueryable();
+
+            if (!includeDeleted)
+            {
+                query = query.Where(p => !p.IsDeleted);
+            }
+
+            var product = await query.FirstOrDefaultAsync(p => p.Id == id);
+
             if (product == null)
             {
                 return NotFound();
@@ -145,7 +182,18 @@ namespace ProductApp.Controllers
                 return BadRequest();
             }
 
-            _context.Entry(product).State = EntityState.Modified;
+            // Prevent modifying IsDeleted through this endpoint
+            var existingProduct = await _context.Products.FindAsync(id);
+            if (existingProduct == null)
+            {
+                return NotFound();
+            }
+
+            // Preserve the IsDeleted and IsActive status unless explicitly changed
+            product.IsDeleted = existingProduct.IsDeleted;
+            product.IsActive = existingProduct.IsActive;
+
+            _context.Entry(existingProduct).CurrentValues.SetValues(product);
 
             try
             {
@@ -170,6 +218,10 @@ namespace ProductApp.Controllers
         [HttpPost]
         public async Task<ActionResult<Products>> PostProduct(Products product)
         {
+            // Ensure new products are active and not deleted by default
+            product.IsActive = true;
+            product.IsDeleted = false;
+
             _context.Products.Add(product);
             await _context.SaveChangesAsync();
 
@@ -186,7 +238,44 @@ namespace ProductApp.Controllers
                 return NotFound();
             }
 
-            _context.Products.Remove(product);
+            // Soft delete instead of removing
+            product.IsDeleted = true;
+            product.IsActive = false;
+
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        // PATCH: api/Products/5/Restore
+        [HttpPatch("{id}/Restore")]
+        public async Task<IActionResult> RestoreProduct(int id)
+        {
+            var product = await _context.Products.FindAsync(id);
+            if (product == null)
+            {
+                return NotFound();
+            }
+
+            product.IsDeleted = false;
+            product.IsActive = true;
+
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        // PATCH: api/Products/5/SetActive
+        [HttpPatch("{id}/SetActive")]
+        public async Task<IActionResult> SetProductActiveStatus(int id, [FromBody] bool isActive)
+        {
+            var product = await _context.Products.FindAsync(id);
+            if (product == null)
+            {
+                return NotFound();
+            }
+
+            product.IsActive = isActive;
             await _context.SaveChangesAsync();
 
             return NoContent();
@@ -194,9 +283,16 @@ namespace ProductApp.Controllers
 
         // GET: api/Products/Categories
         [HttpGet("Categories")]
-        public async Task<ActionResult<IEnumerable<string>>> GetCategories()
+        public async Task<ActionResult<IEnumerable<string>>> GetCategories(bool includeDeleted = false)
         {
-            return await _context.Products
+            var query = _context.Products.AsQueryable();
+
+            if (!includeDeleted)
+            {
+                query = query.Where(p => !p.IsDeleted);
+            }
+
+            return await query
                 .Select(p => p.Category)
                 .Distinct()
                 .ToListAsync();
@@ -212,14 +308,15 @@ namespace ProductApp.Controllers
             string search,
             string category,
             decimal? minPrice,
-            decimal? maxPrice)
+            decimal? maxPrice,
+            bool? isActive)
         {
             if (!string.IsNullOrEmpty(search))
             {
                 query = query.Where(p =>
                     p.Name.Contains(search) ||
                     p.Description.Contains(search) ||
-                    (p.Category != null && p.Category.Contains(search))); 
+                    (p.Category != null && p.Category.Contains(search)));
             }
 
             if (!string.IsNullOrEmpty(category))
@@ -235,6 +332,11 @@ namespace ProductApp.Controllers
             if (maxPrice.HasValue)
             {
                 query = query.Where(p => p.Price <= maxPrice.Value);
+            }
+
+            if (isActive.HasValue)
+            {
+                query = query.Where(p => p.IsActive == isActive.Value);
             }
 
             return query;
@@ -256,6 +358,8 @@ namespace ProductApp.Controllers
                 ("stockquantity", "desc") => query.OrderByDescending(p => p.StockQuantity),
                 ("category", "asc") => query.OrderBy(p => p.Category),
                 ("category", "desc") => query.OrderByDescending(p => p.Category),
+                ("isactive", "asc") => query.OrderBy(p => p.IsActive),
+                ("isactive", "desc") => query.OrderByDescending(p => p.IsActive),
                 _ => query.OrderBy(p => p.Name) // Default sort
             };
         }

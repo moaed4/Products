@@ -1,21 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, Paper, Button, TextField,
   CircularProgress, IconButton, Dialog, DialogTitle,
   DialogContent, DialogActions, Box, MenuItem, Select,
   FormControl, InputLabel, Typography, Chip,
-  Tooltip, Badge, Skeleton, useMediaQuery, useTheme
+  Tooltip, Badge, Skeleton, useMediaQuery, useTheme,
+  Switch, FormControlLabel, Snackbar, Alert
 } from '@mui/material';
 import {
   Search, Add, Edit, Delete, Category, AttachMoney,
   Inventory, Close, Check, FilterList,
-  Refresh, Save, Cancel, FirstPage, LastPage, ChevronLeft, ChevronRight
+  Refresh, Save, Cancel, FirstPage, LastPage, ChevronLeft, ChevronRight,
+  RestoreFromTrash, Visibility, VisibilityOff
 } from '@mui/icons-material';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
-import { toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 
@@ -53,52 +53,146 @@ const slideUp = {
   visible: { y: 0, opacity: 1, transition: { duration: 0.3 } }
 };
 
-// API Service
+// Product Service with proper error handling and cancellation
 const productService = {
-  fetchProducts: async (params) => {
-    const response = await axios.get(PRODUCTS_API_URL, {
-      params: {
-        page: params.pageNumber,
-        pageSize: params.pageSize,
-        sortColumn: params.sortBy,
-        sortOrder: params.sortDescending ? 'desc' : 'asc',
-        search: params.searchTerm,
-        category: params.category
+  fetchProducts: async (params, cancelToken) => {
+    try {
+      const response = await axios.get(PRODUCTS_API_URL, {
+        params: {
+          page: params.pageNumber,
+          pageSize: params.pageSize,
+          sortColumn: params.sortBy,
+          sortOrder: params.sortDescending ? 'desc' : 'asc',
+          search: params.searchTerm,
+          category: params.category,
+          isActive: params.isActive,
+          includeDeleted: params.includeDeleted
+        },
+        cancelToken: cancelToken?.token
+      });
+      return {
+        items: response.data.data || [],
+        totalCount: response.data.totalCount || 0
+      };
+    } catch (error) {
+      if (axios.isCancel(error)) {
+        console.log('Request canceled:', error.message);
+        return { items: [], totalCount: 0 };
       }
-    });
-    return {
-      items: response.data.data || [],
-      totalCount: response.data.totalCount || 0
-    };
+      throw error;
+    }
   },
 
-  fetchStats: async () => {
-    const response = await axios.get(`${PRODUCTS_API_URL}/Stats/Summary`);
-    return response.data;
+  fetchStats: async (includeDeleted = false, cancelToken) => {
+    try {
+      const response = await axios.get(`${PRODUCTS_API_URL}/Stats/Summary`, {
+        params: { includeDeleted },
+        cancelToken: cancelToken?.token
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isCancel(error)) {
+        console.log('Request canceled:', error.message);
+        return {};
+      }
+      throw error;
+    }
   },
 
-  createProduct: async (productData) => {
-    const response = await axios.post(PRODUCTS_API_URL, productData);
-    return response.data;
+  createProduct: async (productData, cancelToken) => {
+    try {
+      const response = await axios.post(PRODUCTS_API_URL, productData, {
+        cancelToken: cancelToken?.token,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isCancel(error)) {
+        console.log('Request canceled:', error.message);
+        return null;
+      }
+      throw error;
+    }
   },
 
-  updateProduct: async (id, productData) => {
-    const response = await axios.put(`${PRODUCTS_API_URL}/${id}`, productData);
-    return response.data;
+  updateProduct: async (id, productData, cancelToken) => {
+    try {
+      const payload = {
+        ...productData,
+        id: id  // Ensure ID matches the URL parameter
+      };
+      
+      const response = await axios.put(`${PRODUCTS_API_URL}/${id}`, payload, {
+        cancelToken: cancelToken?.token,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isCancel(error)) {
+        console.log('Request canceled:', error.message);
+        return null;
+      }
+      throw error;
+    }
   },
 
-  deleteProduct: async (id) => {
-    await axios.delete(`${PRODUCTS_API_URL}/${id}`);
-    return true;
+  deleteProduct: async (id, cancelToken) => {
+    try {
+      await axios.delete(`${PRODUCTS_API_URL}/${id}`, {
+        cancelToken: cancelToken?.token
+      });
+      return true;
+    } catch (error) {
+      if (axios.isCancel(error)) {
+        console.log('Request canceled:', error.message);
+        return false;
+      }
+      throw error;
+    }
+  },
+
+  setProductActiveStatus: async (id, isActive, cancelToken) => {
+    try {
+      const response = await axios.patch(`${PRODUCTS_API_URL}/${id}/SetActive`, { isActive }, {
+        cancelToken: cancelToken?.token
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isCancel(error)) {
+        console.log('Request canceled:', error.message);
+        return null;
+      }
+      throw error;
+    }
+  },
+
+  restoreProduct: async (id, cancelToken) => {
+    try {
+      const response = await axios.patch(`${PRODUCTS_API_URL}/${id}/Restore`, null, {
+        cancelToken: cancelToken?.token
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isCancel(error)) {
+        console.log('Request canceled:', error.message);
+        return null;
+      }
+      throw error;
+    }
   }
 };
 
+// Validation Schema
 const validationSchema = Yup.object().shape({
   name: Yup.string().required('Name is required').max(100),
   description: Yup.string().required('Description is required').max(500),
   price: Yup.number()
     .required('Price is required')
-    .min(0, 'Price must be positive')
+    .min(0.01, 'Price must be at least 0.01')
     .max(1000000, 'Price is too high'),
   stockQuantity: Yup.number()
     .required('Stock quantity is required')
@@ -110,6 +204,7 @@ const validationSchema = Yup.object().shape({
 const ProductTable = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const cancelToken = useRef();
 
   // State
   const [state, setState] = useState({
@@ -124,16 +219,30 @@ const ProductTable = () => {
     currentProduct: null,
     sortConfig: { field: 'name', direction: 'asc' },
     selectedCategory: 'all',
+    filters: {
+      isActive: null,
+      includeDeleted: false
+    },
     stats: {
       totalProducts: 0,
       totalStock: 0,
       totalValue: 0,
-      totalCategories: 0
+      totalCategories: 0,
+      activeProducts: 0,
+      inactiveProducts: 0,
+      deletedProducts: 0
     },
     actionLoading: {
       edit: null,
       delete: null,
-      refresh: false
+      refresh: false,
+      toggleActive: null,
+      restore: null
+    },
+    notification: {
+      open: false,
+      message: '',
+      severity: 'success'
     }
   });
 
@@ -144,7 +253,9 @@ const ProductTable = () => {
       description: '',
       price: 0,
       stockQuantity: 0,
-      category: ''
+      category: '',
+      isActive: true,
+      isDeleted: false
     },
     validationSchema,
     onSubmit: handleSubmit
@@ -157,17 +268,20 @@ const ProductTable = () => {
       
       if (state.currentProduct) {
         await productService.updateProduct(state.currentProduct.id, values);
-        showToast('Product updated successfully!', 'success');
+        showNotification('Product updated successfully!', 'success');
       } else {
         await productService.createProduct(values);
-        showToast('Product created successfully!', 'success');
+        showNotification('Product created successfully!', 'success');
       }
       
       handleCloseDialog();
       resetForm();
       loadData();
     } catch (error) {
-      showToast(error.response?.data?.message || 'Operation failed', 'error');
+      showNotification(
+        error.response?.data?.message || 'Operation failed', 
+        'error'
+      );
     } finally {
       setState(prev => ({ ...prev, loading: false }));
     }
@@ -175,18 +289,51 @@ const ProductTable = () => {
 
   async function handleDelete(id) {
     try {
-      setState(prev => ({ ...prev, actionLoading: { ...prev.actionLoading, delete: id } }));
+      setState(prev => ({ 
+        ...prev, 
+        actionLoading: { ...prev.actionLoading, delete: id } 
+      }));
       
       const confirmed = window.confirm('Are you sure you want to delete this product?');
       if (confirmed) {
         await productService.deleteProduct(id);
-        showToast('Product deleted successfully!', 'success');
+        showNotification('Product deleted successfully!', 'success');
         loadData();
       }
     } catch (error) {
-      showToast('Failed to delete product', 'error');
+      showNotification(
+        error.response?.data?.message || 'Failed to delete product', 
+        'error'
+      );
     } finally {
-      setState(prev => ({ ...prev, actionLoading: { ...prev.actionLoading, delete: null } }));
+      setState(prev => ({ 
+        ...prev, 
+        actionLoading: { ...prev.actionLoading, delete: null } 
+      }));
+    }
+  }
+
+
+  async function handleRestore(id) {
+    try {
+      setState(prev => ({ 
+        ...prev, 
+        actionLoading: { ...prev.actionLoading, restore: id } 
+      }));
+      
+      await productService.restoreProduct(id);
+      showNotification('Product restored successfully!', 'success');
+      loadData();
+    } catch (error) {
+      showNotification(
+        error.response?.data?.message || 'Failed to restore product', 
+        'error'
+      );
+    } finally {
+      setState(prev => ({ 
+        ...prev, 
+        actionLoading: { ...prev.actionLoading, restore: null } 
+      }));
     }
   }
 
@@ -198,7 +345,15 @@ const ProductTable = () => {
     }));
     
     if (product) {
-      formik.setValues(product);
+      formik.setValues({
+        name: product.name,
+        description: product.description,
+        price: product.price,
+        stockQuantity: product.stockQuantity,
+        category: product.category,
+        isActive: product.isActive,
+        isDeleted: product.isDeleted
+      });
     } else {
       formik.resetForm();
     }
@@ -209,23 +364,38 @@ const ProductTable = () => {
     formik.resetForm();
   }
 
-  function showToast(message, type = 'success') {
-    toast[type](
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-      >
-        {type === 'success' ? <Check color="success" /> : <Close color="error" />}
-        {message}
-      </motion.div>,
-      { autoClose: type === 'success' ? 2000 : 3000 }
-    );
+  function showNotification(message, severity) {
+    setState(prev => ({
+      ...prev,
+      notification: {
+        open: true,
+        message,
+        severity
+      }
+    }));
+  }
+
+  function handleCloseNotification() {
+    setState(prev => ({
+      ...prev,
+      notification: {
+        ...prev.notification,
+        open: false
+      }
+    }));
   }
 
   // Data Loading
   async function loadData() {
     try {
+      // Cancel previous request if it exists
+      if (cancelToken.current) {
+        cancelToken.current.cancel('Operation canceled due to new request');
+      }
+      
+      // Create new cancel token
+      cancelToken.current = axios.CancelToken.source();
+      
       setState(prev => ({ ...prev, loading: true }));
       
       const [productsData, statsData] = await Promise.all([
@@ -235,9 +405,11 @@ const ProductTable = () => {
           searchTerm: state.searchTerm,
           sortBy: state.sortConfig.field,
           sortDescending: state.sortConfig.direction === 'desc',
-          category: state.selectedCategory !== 'all' ? state.selectedCategory : undefined
-        }),
-        productService.fetchStats()
+          category: state.selectedCategory !== 'all' ? state.selectedCategory : undefined,
+          isActive: state.filters.isActive,
+          includeDeleted: state.filters.includeDeleted
+        }, cancelToken.current),
+        productService.fetchStats(state.filters.includeDeleted, cancelToken.current)
       ]);
 
       setState(prev => ({
@@ -248,17 +420,22 @@ const ProductTable = () => {
           totalProducts: statsData.totalProducts,
           totalStock: statsData.totalStock,
           totalValue: statsData.totalValue,
-          totalCategories: statsData.totalCategories
+          totalCategories: statsData.totalCategories,
+          activeProducts: statsData.activeProducts,
+          inactiveProducts: statsData.inactiveProducts,
+          deletedProducts: statsData.deletedProducts
         },
         initialLoad: false
       }));
     } catch (error) {
-      showToast('Failed to load data', 'error');
-      setState(prev => ({
-        ...prev,
-        products: [],
-        totalCount: 0
-      }));
+      if (!axios.isCancel(error)) {
+        showNotification('Failed to load data', 'error');
+        setState(prev => ({
+          ...prev,
+          products: [],
+          totalCount: 0
+        }));
+      }
     } finally {
       setState(prev => ({ 
         ...prev, 
@@ -268,14 +445,31 @@ const ProductTable = () => {
     }
   }
 
-  // Effects
+  // Clean up cancel token on unmount
+  useEffect(() => {
+    return () => {
+      if (cancelToken.current) {
+        cancelToken.current.cancel('Component unmounted');
+      }
+    };
+  }, []);
+
+  // Load data when dependencies change
   useEffect(() => {
     const timer = setTimeout(() => {
       loadData();
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [state.page, state.rowsPerPage, state.searchTerm, state.sortConfig, state.selectedCategory]);
+  }, [
+    state.page, 
+    state.rowsPerPage, 
+    state.searchTerm, 
+    state.sortConfig, 
+    state.selectedCategory,
+    state.filters.isActive,
+    state.filters.includeDeleted
+  ]);
 
   // Components
   function SortIndicator({ field }) {
@@ -300,6 +494,29 @@ const ProductTable = () => {
         color={cat.color}
         variant="outlined"
         sx={{ borderRadius: 1, fontWeight: 500 }}
+      />
+    );
+  }
+
+  function StatusBadge({ isActive, isDeleted }) {
+    if (isDeleted) {
+      return (
+        <Chip
+          size="small"
+          label="Deleted"
+          color="error"
+          icon={<Delete fontSize="small" />}
+          sx={{ borderRadius: 1 }}
+        />
+      );
+    }
+    return (
+      <Chip
+        size="small"
+        label={isActive ? 'Active' : 'Inactive'}
+        color={isActive ? 'success' : 'warning'}
+        icon={isActive ? <Check fontSize="small" /> : <Close fontSize="small" />}
+        sx={{ borderRadius: 1 }}
       />
     );
   }
@@ -354,7 +571,7 @@ const ProductTable = () => {
         <Table>
           <TableHead>
             <TableRow>
-              {['Name', 'Description', 'Price', 'Stock', 'Category', 'Actions'].map((header) => (
+              {['Name', 'Description', 'Price', 'Stock', 'Category', 'Status', 'Actions'].map((header) => (
                 <TableCell key={header}>
                   <Skeleton variant="text" width="80%" height={24} />
                 </TableCell>
@@ -369,8 +586,10 @@ const ProductTable = () => {
                 <TableCell><Skeleton variant="text" width="60%" /></TableCell>
                 <TableCell><Skeleton variant="text" width="40%" /></TableCell>
                 <TableCell><Skeleton variant="text" width="70%" /></TableCell>
+                <TableCell><Skeleton variant="text" width="50%" /></TableCell>
                 <TableCell>
                   <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Skeleton variant="circular" width={32} height={32} />
                     <Skeleton variant="circular" width={32} height={32} />
                     <Skeleton variant="circular" width={32} height={32} />
                   </Box>
@@ -467,7 +686,7 @@ const ProductTable = () => {
                 <Typography variant="h4" sx={{ fontWeight: 700 }}>{state.stats.totalProducts}</Typography>
                 <Category color="primary" />
               </Box>
-              <Typography variant="caption" color="textSecondary">Across all categories</Typography>
+          
             </Paper>
 
             <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
@@ -560,6 +779,8 @@ const ProductTable = () => {
               ))}
             </Box>
           </Box>
+
+         
         </Paper>
       </motion.div>
 
@@ -583,7 +804,7 @@ const ProductTable = () => {
                         { field: '', label: 'Actions' }
                       ].map((header) => (
                         <TableCell
-                          key={header.field}
+                          key={header.field || 'actions'}
                           sx={{ 
                             fontWeight: 700,
                             cursor: header.field ? 'pointer' : 'default'
@@ -611,7 +832,7 @@ const ProductTable = () => {
                   <TableBody>
                     {state.loading && state.products.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} align="center">
+                        <TableCell colSpan={7} align="center">
                           <CircularProgress />
                         </TableCell>
                       </TableRow>
@@ -622,15 +843,22 @@ const ProductTable = () => {
                           key={product.id}
                           sx={{
                             '&:last-child td': { borderBottom: 0 },
-                            '&:hover': { bgcolor: `${colors.primary}08` }
+                            '&:hover': { bgcolor: `${colors.primary}08` },
+                            opacity: product.isDeleted ? 0.7 : 1,
+                            bgcolor: product.isDeleted ? `${colors.error}10` : 'inherit'
                           }}
                         >
                           <TableCell>
                             <Typography fontWeight={500}>{product.name}</Typography>
+                            {product.isDeleted && (
+                              <Typography variant="caption" color="textSecondary">
+                                (Deleted)
+                              </Typography>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Typography variant="body2" color="textSecondary">
-                              {product.description.substring(0, 50)}...
+                              {product.description?.substring(0, 50)}...
                             </Typography>
                           </TableCell>
                           <TableCell>
@@ -655,43 +883,66 @@ const ProductTable = () => {
                           <TableCell>
                             <CategoryChip category={product.category} />
                           </TableCell>
+                          
                           <TableCell>
                             <Box sx={{ display: 'flex', gap: 1 }}>
-                              <Tooltip title="Edit" arrow>
-                                <IconButton
-                                  color="primary"
-                                  onClick={() => handleOpenDialog(product)}
-                                  size="small"
-                                  disabled={state.actionLoading.edit === product.id}
-                                >
-                                  {state.actionLoading.edit === product.id ? (
-                                    <CircularProgress size={24} />
-                                  ) : (
-                                    <Edit fontSize="small" />
-                                  )}
-                                </IconButton>
-                              </Tooltip>
-                              <Tooltip title="Delete" arrow>
-                                <IconButton
-                                  color="error"
-                                  onClick={() => handleDelete(product.id)}
-                                  size="small"
-                                  disabled={state.actionLoading.delete === product.id}
-                                >
-                                  {state.actionLoading.delete === product.id ? (
-                                    <CircularProgress size={24} />
-                                  ) : (
-                                    <Delete fontSize="small" />
-                                  )}
-                                </IconButton>
-                              </Tooltip>
+                              {!product.isDeleted && (
+                                <>
+                                  <Tooltip title="Edit" arrow>
+                                    <IconButton
+                                      color="primary"
+                                      onClick={() => handleOpenDialog(product)}
+                                      size="small"
+                                      disabled={state.actionLoading.edit === product.id}
+                                    >
+                                      {state.actionLoading.edit === product.id ? (
+                                        <CircularProgress size={24} />
+                                      ) : (
+                                        <Edit fontSize="small" />
+                                      )}
+                                    </IconButton>
+                                  </Tooltip>
+                                  
+                                </>
+                              )}
+                              {product.isDeleted ? (
+                                <Tooltip title="Restore" arrow>
+                                  <IconButton
+                                    color="success"
+                                    onClick={() => handleRestore(product.id)}
+                                    size="small"
+                                    disabled={state.actionLoading.restore === product.id}
+                                  >
+                                    {state.actionLoading.restore === product.id ? (
+                                      <CircularProgress size={24} />
+                                    ) : (
+                                      <RestoreFromTrash fontSize="small" />
+                                    )}
+                                  </IconButton>
+                                </Tooltip>
+                              ) : (
+                                <Tooltip title="Delete" arrow>
+                                  <IconButton
+                                    color="error"
+                                    onClick={() => handleDelete(product.id)}
+                                    size="small"
+                                    disabled={state.actionLoading.delete === product.id}
+                                  >
+                                    {state.actionLoading.delete === product.id ? (
+                                      <CircularProgress size={24} />
+                                    ) : (
+                                      <Delete fontSize="small" />
+                                    )}
+                                  </IconButton>
+                                </Tooltip>
+                              )}
                             </Box>
                           </TableCell>
                         </TableRow>
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                        <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                           <Box sx={{
                             display: 'flex',
                             flexDirection: 'column',
@@ -711,7 +962,11 @@ const ProductTable = () => {
                                 setState(prev => ({
                                   ...prev,
                                   searchTerm: '',
-                                  selectedCategory: 'all'
+                                  selectedCategory: 'all',
+                                  filters: {
+                                    isActive: null,
+                                    includeDeleted: false
+                                  }
                                 }));
                               }}
                               sx={{ mt: 2 }}
@@ -892,7 +1147,8 @@ const ProductTable = () => {
                   variant="outlined"
                   size="small"
                   InputProps={{
-                    startAdornment: <AttachMoney fontSize="small" sx={{ color: 'text.secondary', mr: 1 }} />
+                    startAdornment: <AttachMoney fontSize="small" sx={{ color: 'text.secondary', mr: 1 }} />,
+                    inputProps: { min: 0.01, step: 0.01 }
                   }}
                 />
 
@@ -908,7 +1164,8 @@ const ProductTable = () => {
                   variant="outlined"
                   size="small"
                   InputProps={{
-                    startAdornment: <Inventory fontSize="small" sx={{ color: 'text.secondary', mr: 1 }} />
+                    startAdornment: <Inventory fontSize="small" sx={{ color: 'text.secondary', mr: 1 }} />,
+                    inputProps: { min: 0 }
                   }}
                 />
               </Box>
@@ -943,6 +1200,19 @@ const ProductTable = () => {
                   </Typography>
                 )}
               </FormControl>
+
+              {state.currentProduct && (
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                 
+                  {formik.values.isDeleted && (
+                    <Chip
+                      label="Deleted"
+                      color="error"
+                      icon={<Delete fontSize="small" />}
+                    />
+                  )}
+                </Box>
+              )}
             </Box>
           </DialogContent>
 
@@ -979,6 +1249,22 @@ const ProductTable = () => {
           </DialogActions>
         </form>
       </Dialog>
+
+      {/* Notification Snackbar */}
+      <Snackbar
+        open={state.notification.open}
+        autoHideDuration={6000}
+        onClose={handleCloseNotification}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={handleCloseNotification}
+          severity={state.notification.severity}
+          sx={{ width: '100%' }}
+        >
+          {state.notification.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

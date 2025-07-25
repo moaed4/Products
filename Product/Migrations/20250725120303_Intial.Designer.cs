@@ -11,7 +11,7 @@ using Product.Data;
 namespace Product.Migrations
 {
     [DbContext(typeof(ProductContext))]
-    [Migration("20250725111524_Intial")]
+    [Migration("20250725120303_Intial")]
     partial class Intial
     {
         /// <inheritdoc />
@@ -41,6 +41,12 @@ namespace Product.Migrations
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
 
                     b.Property<string>("Name")
                         .IsRequired()
