@@ -23,8 +23,7 @@ namespace ProductApp.Models
         [Required, StringLength(50)]
         public string Category { get; set; } = string.Empty;
 
-        [StringLength(50)]
-        public string? Manufacturer { get; set; }
+       
 
     }
 

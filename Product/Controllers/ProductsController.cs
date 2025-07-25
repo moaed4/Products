@@ -219,8 +219,7 @@ namespace ProductApp.Controllers
                 query = query.Where(p =>
                     p.Name.Contains(search) ||
                     p.Description.Contains(search) ||
-                    (p.Category != null && p.Category.Contains(search)) ||
-                    (p.Manufacturer != null && p.Manufacturer.Contains(search)));
+                    (p.Category != null && p.Category.Contains(search))); 
             }
 
             if (!string.IsNullOrEmpty(category))
@@ -257,8 +256,6 @@ namespace ProductApp.Controllers
                 ("stockquantity", "desc") => query.OrderByDescending(p => p.StockQuantity),
                 ("category", "asc") => query.OrderBy(p => p.Category),
                 ("category", "desc") => query.OrderByDescending(p => p.Category),
-                ("manufacturer", "asc") => query.OrderBy(p => p.Manufacturer),
-                ("manufacturer", "desc") => query.OrderByDescending(p => p.Manufacturer),
                 _ => query.OrderBy(p => p.Name) // Default sort
             };
         }
