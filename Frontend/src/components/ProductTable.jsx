@@ -18,24 +18,44 @@ import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import { IoFastFood } from "react-icons/io5";
-import { GiClothes } from "react-icons/gi";
-import { FcElectronics } from "react-icons/fc";
-import { MdOutlineChair } from "react-icons/md";
-import { FaBook } from "react-icons/fa";
-import { MdProductionQuantityLimits } from "react-icons/md";
 
-// API Configuration
+// Constants
 const API_BASE_URL = 'https://localhost:7005/api';
 const PRODUCTS_API_URL = `${API_BASE_URL}/Products`;
 
-// Simulated API delay for demo purposes
-const simulateDelay = () => new Promise(resolve => setTimeout(resolve, 1000));
+const categories = [
+  { value: 'Electronics', color: 'primary', icon: '📱' },
+  { value: 'Clothing', color: 'secondary', icon: '👕' },
+  { value: 'Food', color: 'success', icon: '🍎' },
+  { value: 'Furniture', color: 'warning', icon: '🪑' },
+  { value: 'Books', color: 'info', icon: '📚' },
+  { value: 'Other', color: 'error', icon: '📦' }
+];
 
-// Fetch API
-const fetchProducts = async (params) => {
-  await simulateDelay();
-  try {
+const colors = {
+  primary: '#6366F1',
+  secondary: '#EC4899',
+  success: '#10B981',
+  warning: '#F59E0B',
+  error: '#EF4444',
+  info: '#3B82F6',
+  dark: '#1F2937',
+  light: '#F3F4F6'
+};
+
+const fadeIn = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.5 } }
+};
+
+const slideUp = {
+  hidden: { y: 20, opacity: 0 },
+  visible: { y: 0, opacity: 1, transition: { duration: 0.3 } }
+};
+
+// API Service
+const productService = {
+  fetchProducts: async (params) => {
     const response = await axios.get(PRODUCTS_API_URL, {
       params: {
         page: params.pageNumber,
@@ -50,46 +70,30 @@ const fetchProducts = async (params) => {
       items: response.data.data || [],
       totalCount: response.data.totalCount || 0
     };
-  } catch (error) {
-    throw error;
-  }
-};
+  },
 
-// Create Function
-const createProduct = async (productData) => {
-  await simulateDelay();
-  try {
+  fetchStats: async () => {
+    const response = await axios.get(`${PRODUCTS_API_URL}/Stats/Summary`);
+    return response.data;
+  },
+
+  createProduct: async (productData) => {
     const response = await axios.post(PRODUCTS_API_URL, productData);
     return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
+  },
 
-// Update Function
-const updateProduct = async (id, productData) => {
-  await simulateDelay();
-  try {
+  updateProduct: async (id, productData) => {
     const response = await axios.put(`${PRODUCTS_API_URL}/${id}`, productData);
     return response.data;
-  } catch (error) {
-    throw error;
-  }
-};
+  },
 
-// Delete Function
-const deleteProduct = async (id) => {
-  await simulateDelay();
-  try {
+  deleteProduct: async (id) => {
     await axios.delete(`${PRODUCTS_API_URL}/${id}`);
     return true;
-  } catch (error) {
-    throw error;
   }
 };
 
-// Validation Schema
-const productValidationSchema = Yup.object().shape({
+const validationSchema = Yup.object().shape({
   name: Yup.string().required('Name is required').max(100),
   description: Yup.string().required('Description is required').max(500),
   price: Yup.number()
@@ -103,68 +107,37 @@ const productValidationSchema = Yup.object().shape({
   category: Yup.string().required('Category is required')
 });
 
-// Category Configuration
-const categories = [
-  { value: 'Electronics', color: 'primary', icon: <FcElectronics /> },
-  { value: 'Clothing', color: 'secondary', icon: <GiClothes /> },
-  { value: 'Food', color: 'success', icon: <IoFastFood /> },
-  { value: 'Furniture', color: 'warning', icon: <MdOutlineChair /> },
-  { value: 'Books', color: 'info', icon: <FaBook /> },
-  { value: 'Other', color: 'error', icon: <FilterList /> }
-];
-
-// Color Scheme
-const colors = {
-  primary: '#6366F1',
-  secondary: '#EC4899',
-  success: '#10B981',
-  warning: '#F59E0B',
-  error: '#EF4444',
-  info: '#3B82F6',
-  dark: '#1F2937',
-  light: '#F3F4F6'
-};
-
-// Animation Variants
-const fadeIn = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 0.5 } }
-};
-
-const slideUp = {
-  hidden: { y: 20, opacity: 0 },
-  visible: { y: 0, opacity: 1, transition: { duration: 0.3 } }
-};
-
 const ProductTable = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  // State Management
-  const [products, setProducts] = useState([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(true);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(5);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [openDialog, setOpenDialog] = useState(false);
-  const [currentProduct, setCurrentProduct] = useState(null);
-  const [sortConfig, setSortConfig] = useState({ field: 'name', direction: 'asc' });
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [stats, setStats] = useState({
-    totalProducts: 0,
-    totalStock: 0,
-    totalValue: 0,
-    categories: {}
-  });
-  const [actionLoading, setActionLoading] = useState({
-    edit: null,
-    delete: null,
-    refresh: false
+  // State
+  const [state, setState] = useState({
+    products: [],
+    totalCount: 0,
+    loading: false,
+    initialLoad: true,
+    page: 0,
+    rowsPerPage: 10,
+    searchTerm: '',
+    openDialog: false,
+    currentProduct: null,
+    sortConfig: { field: 'name', direction: 'asc' },
+    selectedCategory: 'all',
+    stats: {
+      totalProducts: 0,
+      totalStock: 0,
+      totalValue: 0,
+      totalCategories: 0
+    },
+    actionLoading: {
+      edit: null,
+      delete: null,
+      refresh: false
+    }
   });
 
-  // Formik Configuration
+  // Formik
   const formik = useFormik({
     initialValues: {
       name: '',
@@ -173,245 +146,167 @@ const ProductTable = () => {
       stockQuantity: 0,
       category: ''
     },
-    validationSchema: productValidationSchema,
-    onSubmit: async (values, { resetForm }) => {
-      try {
-        setLoading(true);
-        if (currentProduct) {
-          await updateProduct(currentProduct.id, values);
-          toast.success(
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              <Check color="success" /> Product updated successfully!
-            </motion.div>,
-            { autoClose: 2000 }
-          );
-        } else {
-          await createProduct(values);
-          toast.success(
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-            >
-              <Check color="success" /> Product created successfully!
-            </motion.div>,
-            { autoClose: 2000 }
-          );
-        }
-        handleCloseDialog();
-        resetForm();
-        loadProducts();
-      } catch (error) {
-        toast.error(
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            <Close color="error" /> {error.response?.data?.message || 'Operation failed'}
-          </motion.div>,
-          { autoClose: 3000 }
-        );
-      } finally {
-        setLoading(false);
-      }
-    }
+    validationSchema,
+    onSubmit: handleSubmit
   });
 
-  // Load Products Data
-  const loadProducts = async () => {
+  // Handlers
+  async function handleSubmit(values, { resetForm }) {
     try {
-      setLoading(true);
-      const params = {
-        pageNumber: page + 1,
-        pageSize: rowsPerPage,
-        searchTerm: searchTerm,
-        sortBy: sortConfig.field,
-        sortDescending: sortConfig.direction === 'desc',
-        category: selectedCategory !== 'all' ? selectedCategory : undefined
-      };
-
-      const { items, totalCount } = await fetchProducts(params);
-      setProducts(items);
-      setTotalCount(totalCount);
-
-      // Calculate stats
-      const totalStock = items.reduce((sum, product) => sum + product.stockQuantity, 0);
-      const totalValue = items.reduce((sum, product) => sum + (product.price * product.stockQuantity), 0);
-
-      const categoryCounts = items.reduce((acc, product) => {
-        acc[product.category] = (acc[product.category] || 0) + 1;
-        return acc;
-      }, {});
-
-      setStats({
-        totalProducts: totalCount,
-        totalStock,
-        totalValue,
-        categories: categoryCounts
-      });
-
-      setInitialLoad(false);
+      setState(prev => ({ ...prev, loading: true }));
+      
+      if (state.currentProduct) {
+        await productService.updateProduct(state.currentProduct.id, values);
+        showToast('Product updated successfully!', 'success');
+      } else {
+        await productService.createProduct(values);
+        showToast('Product created successfully!', 'success');
+      }
+      
+      handleCloseDialog();
+      resetForm();
+      loadData();
     } catch (error) {
-      toast.error(
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-        >
-          <Close color="error" /> Failed to load products
-        </motion.div>,
-        { autoClose: 3000 }
-      );
-      setProducts([]);
-      setTotalCount(0);
+      showToast(error.response?.data?.message || 'Operation failed', 'error');
     } finally {
-      setLoading(false);
-      setActionLoading(prev => ({ ...prev, refresh: false }));
+      setState(prev => ({ ...prev, loading: false }));
     }
-  };
+  }
 
-  // Handle Product Delete
-  const handleDelete = async (id) => {
+  async function handleDelete(id) {
     try {
-      setActionLoading(prev => ({ ...prev, delete: id }));
+      setState(prev => ({ ...prev, actionLoading: { ...prev.actionLoading, delete: id } }));
+      
       const confirmed = window.confirm('Are you sure you want to delete this product?');
       if (confirmed) {
-        await deleteProduct(id);
-        toast.success(
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            <Check color="success" /> Product deleted successfully!
-          </motion.div>,
-          { autoClose: 2000 }
-        );
-        // Reset to first page if we're on a page that might now be empty
-        if (products.length === 1 && page > 0) {
-          setPage(page - 1);
-        } else {
-          loadProducts();
-        }
+        await productService.deleteProduct(id);
+        showToast('Product deleted successfully!', 'success');
+        loadData();
       }
     } catch (error) {
-      toast.error(
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-        >
-          <Close color="error" /> Failed to delete product
-        </motion.div>,
-        { autoClose: 3000 }
-      );
+      showToast('Failed to delete product', 'error');
     } finally {
-      setActionLoading(prev => ({ ...prev, delete: null }));
+      setState(prev => ({ ...prev, actionLoading: { ...prev.actionLoading, delete: null } }));
     }
-  };
+  }
 
-  // Handle Refresh
-  const handleRefresh = () => {
-    setActionLoading(prev => ({ ...prev, refresh: true }));
-    loadProducts();
-  };
-
-  // Handle Dialog Open/Close
-  const handleOpenDialog = (product = null) => {
-    setCurrentProduct(product);
+  function handleOpenDialog(product = null) {
+    setState(prev => ({ 
+      ...prev, 
+      currentProduct: product,
+      openDialog: true 
+    }));
+    
     if (product) {
       formik.setValues(product);
     } else {
       formik.resetForm();
     }
-    setOpenDialog(true);
-  };
+  }
 
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-    setCurrentProduct(null);
+  function handleCloseDialog() {
+    setState(prev => ({ ...prev, openDialog: false, currentProduct: null }));
     formik.resetForm();
-  };
+  }
 
-  // Handle Pagination Changes
-  const handlePageChange = (event, newPage) => {
-    setPage(newPage);
-  };
+  function showToast(message, type = 'success') {
+    toast[type](
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+      >
+        {type === 'success' ? <Check color="success" /> : <Close color="error" />}
+        {message}
+      </motion.div>,
+      { autoClose: type === 'success' ? 2000 : 3000 }
+    );
+  }
 
-  const handleRowsPerPageChange = (event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
+  // Data Loading
+  async function loadData() {
+    try {
+      setState(prev => ({ ...prev, loading: true }));
+      
+      const [productsData, statsData] = await Promise.all([
+        productService.fetchProducts({
+          pageNumber: state.page + 1,
+          pageSize: state.rowsPerPage,
+          searchTerm: state.searchTerm,
+          sortBy: state.sortConfig.field,
+          sortDescending: state.sortConfig.direction === 'desc',
+          category: state.selectedCategory !== 'all' ? state.selectedCategory : undefined
+        }),
+        productService.fetchStats()
+      ]);
 
-  // Handle Search
-  const handleSearchChange = (event) => {
-    setSearchTerm(event.target.value);
-    setPage(0);
-  };
+      setState(prev => ({
+        ...prev,
+        products: productsData.items,
+        totalCount: productsData.totalCount,
+        stats: {
+          totalProducts: statsData.totalProducts,
+          totalStock: statsData.totalStock,
+          totalValue: statsData.totalValue,
+          totalCategories: statsData.totalCategories
+        },
+        initialLoad: false
+      }));
+    } catch (error) {
+      showToast('Failed to load data', 'error');
+      setState(prev => ({
+        ...prev,
+        products: [],
+        totalCount: 0
+      }));
+    } finally {
+      setState(prev => ({ 
+        ...prev, 
+        loading: false,
+        actionLoading: { ...prev.actionLoading, refresh: false }
+      }));
+    }
+  }
 
-  // Handle Sort
-  const handleSort = (field) => {
-    setSortConfig({
-      field,
-      direction: sortConfig.field === field && sortConfig.direction === 'asc' ? 'desc' : 'asc'
-    });
-    setPage(0);
-  };
-
-  // Handle Category Filter
-  const handleCategoryFilter = (category) => {
-    setSelectedCategory(category);
-    setPage(0);
-  };
-
-  // Load data on component mount and when dependencies change
+  // Effects
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadProducts();
-    }, 500); // Debounce to prevent rapid API calls
+      loadData();
+    }, 300);
 
     return () => clearTimeout(timer);
-  }, [page, rowsPerPage, searchTerm, sortConfig, selectedCategory]);
+  }, [state.page, state.rowsPerPage, state.searchTerm, state.sortConfig, state.selectedCategory]);
 
-  // Render Sort Indicator
-  const SortIndicator = ({ field }) => {
-    if (sortConfig.field !== field) return null;
+  // Components
+  function SortIndicator({ field }) {
+    if (state.sortConfig.field !== field) return null;
     return (
       <motion.span
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         style={{ display: 'inline-flex', marginLeft: 4 }}
       >
-        {sortConfig.direction === 'asc' ? '↑' : '↓'}
+        {state.sortConfig.direction === 'asc' ? '↑' : '↓'}
       </motion.span>
     );
-  };
+  }
 
-  // Render Category Chip
-  const CategoryChip = ({ category }) => {
+  function CategoryChip({ category }) {
     const cat = categories.find(c => c.value === category) || categories[categories.length - 1];
     return (
       <Chip
         size="small"
-        icon={cat.icon}
-        label={category}
+        label={<>{cat.icon} {category}</>}
         color={cat.color}
         variant="outlined"
         sx={{ borderRadius: 1, fontWeight: 500 }}
       />
     );
-  };
+  }
 
-  // Calculate total pages
-  const totalPages = Math.ceil(totalCount / rowsPerPage);
+  const totalPages = Math.ceil(state.totalCount / state.rowsPerPage);
 
-  // Generate page numbers to display
-  const getPageNumbers = () => {
+  function getPageNumbers() {
     const pages = [];
     const maxVisiblePages = 5;
 
@@ -420,7 +315,7 @@ const ProductTable = () => {
         pages.push(i);
       }
     } else {
-      const startPage = Math.max(0, Math.min(page - Math.floor(maxVisiblePages / 2), totalPages - maxVisiblePages));
+      const startPage = Math.max(0, Math.min(state.page - Math.floor(maxVisiblePages / 2), totalPages - maxVisiblePages));
       const endPage = Math.min(startPage + maxVisiblePages - 1, totalPages - 1);
 
       for (let i = startPage; i <= endPage; i++) {
@@ -429,61 +324,64 @@ const ProductTable = () => {
     }
 
     return pages;
-  };
+  }
 
-  // Skeleton Loaders
-  const StatsSkeleton = () => (
-    <Box sx={{
-      display: 'grid',
-      gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)',
-      gap: 2,
-      mb: 3
-    }}>
-      {[1, 2, 3, 4].map((item) => (
-        <Paper key={item} elevation={3} sx={{ p: 2, borderRadius: 2 }}>
-          <Skeleton variant="text" width="60%" height={24} />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
-            <Skeleton variant="text" width={50} height={40} />
-            <Skeleton variant="circular" width={24} height={24} />
-          </Box>
-          <Skeleton variant="text" width="80%" height={20} />
-        </Paper>
-      ))}
-    </Box>
-  );
+  function StatsSkeleton() {
+    return (
+      <Box sx={{
+        display: 'grid',
+        gridTemplateColumns: isMobile ? '1fr' : 'repeat(4, 1fr)',
+        gap: 2,
+        mb: 3
+      }}>
+        {[1, 2, 3, 4].map((item) => (
+          <Paper key={item} elevation={3} sx={{ p: 2, borderRadius: 2 }}>
+            <Skeleton variant="text" width="60%" height={24} />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+              <Skeleton variant="text" width={50} height={40} />
+              <Skeleton variant="circular" width={24} height={24} />
+            </Box>
+            <Skeleton variant="text" width="80%" height={20} />
+          </Paper>
+        ))}
+      </Box>
+    );
+  }
 
-  const TableSkeleton = () => (
-    <TableContainer component={Paper}>
-      <Table>
-        <TableHead>
-          <TableRow>
-            {['Name', 'Description', 'Price', 'Stock', 'Category', 'Actions'].map((header) => (
-              <TableCell key={header}>
-                <Skeleton variant="text" width="80%" height={24} />
-              </TableCell>
-            ))}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {Array.from({ length: rowsPerPage }).map((_, index) => (
-            <TableRow key={index}>
-              <TableCell><Skeleton variant="text" /></TableCell>
-              <TableCell><Skeleton variant="text" /></TableCell>
-              <TableCell><Skeleton variant="text" width="60%" /></TableCell>
-              <TableCell><Skeleton variant="text" width="40%" /></TableCell>
-              <TableCell><Skeleton variant="text" width="70%" /></TableCell>
-              <TableCell>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Skeleton variant="circular" width={32} height={32} />
-                  <Skeleton variant="circular" width={32} height={32} />
-                </Box>
-              </TableCell>
+  function TableSkeleton() {
+    return (
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              {['Name', 'Description', 'Price', 'Stock', 'Category', 'Actions'].map((header) => (
+                <TableCell key={header}>
+                  <Skeleton variant="text" width="80%" height={24} />
+                </TableCell>
+              ))}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-  );
+          </TableHead>
+          <TableBody>
+            {Array.from({ length: state.rowsPerPage }).map((_, index) => (
+              <TableRow key={index}>
+                <TableCell><Skeleton variant="text" /></TableCell>
+                <TableCell><Skeleton variant="text" /></TableCell>
+                <TableCell><Skeleton variant="text" width="60%" /></TableCell>
+                <TableCell><Skeleton variant="text" width="40%" /></TableCell>
+                <TableCell><Skeleton variant="text" width="70%" /></TableCell>
+                <TableCell>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Skeleton variant="circular" width={32} height={32} />
+                    <Skeleton variant="circular" width={32} height={32} />
+                  </Box>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    );
+  }
 
   return (
     <Box sx={{ p: isMobile ? 1 : 3 }}>
@@ -509,14 +407,17 @@ const ProductTable = () => {
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Tooltip title="Refresh data">
               <IconButton
-                onClick={handleRefresh}
-                disabled={actionLoading.refresh}
+                onClick={() => {
+                  setState(prev => ({ ...prev, actionLoading: { ...prev.actionLoading, refresh: true } }));
+                  loadData();
+                }}
+                disabled={state.actionLoading.refresh}
                 sx={{
                   border: `1px solid ${colors.light}`,
                   borderRadius: 2
                 }}
               >
-                {actionLoading.refresh ? (
+                {state.actionLoading.refresh ? (
                   <CircularProgress size={24} />
                 ) : (
                   <Refresh />
@@ -551,7 +452,7 @@ const ProductTable = () => {
         transition={{ staggerChildren: 0.1 }}
         style={{ marginBottom: 24 }}
       >
-        {initialLoad ? (
+        {state.initialLoad ? (
           <StatsSkeleton />
         ) : (
           <Box sx={{
@@ -563,8 +464,8 @@ const ProductTable = () => {
             <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
               <Typography variant="subtitle2" color="textSecondary">Total Products</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="h4" sx={{ fontWeight: 700 }}>{totalCount}</Typography>
-                <MdProductionQuantityLimits size={25} color="primary" />
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>{state.stats.totalProducts}</Typography>
+                <Category color="primary" />
               </Box>
               <Typography variant="caption" color="textSecondary">Across all categories</Typography>
             </Paper>
@@ -572,8 +473,8 @@ const ProductTable = () => {
             <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
               <Typography variant="subtitle2" color="textSecondary">Total Stock</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="h4" sx={{ fontWeight: 700 }}>{stats.totalStock}</Typography>
-                <Category color="secondary" />
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>{state.stats.totalStock}</Typography>
+                <Inventory color="secondary" />
               </Box>
               <Typography variant="caption" color="textSecondary">Items in inventory</Typography>
             </Paper>
@@ -581,7 +482,7 @@ const ProductTable = () => {
             <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
               <Typography variant="subtitle2" color="textSecondary">Inventory Value</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="h4" sx={{ fontWeight: 700 }}>${stats.totalValue.toFixed(2)}</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>${state.stats.totalValue.toFixed(2)}</Typography>
                 <AttachMoney color="success" />
               </Box>
               <Typography variant="caption" color="textSecondary">Current stock value</Typography>
@@ -590,7 +491,7 @@ const ProductTable = () => {
             <Paper elevation={3} sx={{ p: 2, borderRadius: 2 }}>
               <Typography variant="subtitle2" color="textSecondary">Categories</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="h4" sx={{ fontWeight: 700 }}>{Object.keys(stats.categories).length}</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 700 }}>{state.stats.totalCategories}</Typography>
                 <FilterList color="warning" />
               </Box>
               <Typography variant="caption" color="textSecondary">Active categories</Typography>
@@ -613,8 +514,10 @@ const ProductTable = () => {
               label="Search Products"
               variant="outlined"
               size="small"
-              value={searchTerm}
-              onChange={handleSearchChange}
+              value={state.searchTerm}
+              onChange={(e) => {
+                setState(prev => ({ ...prev, searchTerm: e.target.value, page: 0 }));
+              }}
               InputProps={{
                 startAdornment: (
                   <Search sx={{ color: 'text.secondary', mr: 1 }} />
@@ -636,9 +539,9 @@ const ProductTable = () => {
 
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               <Button
-                variant={selectedCategory === 'all' ? 'contained' : 'outlined'}
+                variant={state.selectedCategory === 'all' ? 'contained' : 'outlined'}
                 size="small"
-                onClick={() => handleCategoryFilter('all')}
+                onClick={() => setState(prev => ({ ...prev, selectedCategory: 'all', page: 0 }))}
                 sx={{ borderRadius: 2 }}
               >
                 All
@@ -646,14 +549,13 @@ const ProductTable = () => {
               {categories.map((category) => (
                 <Button
                   key={category.value}
-                  variant={selectedCategory === category.value ? 'contained' : 'outlined'}
+                  variant={state.selectedCategory === category.value ? 'contained' : 'outlined'}
                   size="small"
                   color={category.color}
-                  startIcon={category.icon}
-                  onClick={() => handleCategoryFilter(category.value)}
+                  onClick={() => setState(prev => ({ ...prev, selectedCategory: category.value, page: 0 }))}
                   sx={{ borderRadius: 2 }}
                 >
-                  {category.value}
+                  {category.icon} {category.value}
                 </Button>
               ))}
             </Box>
@@ -664,7 +566,7 @@ const ProductTable = () => {
       {/* Product Table */}
       <motion.div initial="hidden" animate="visible" variants={fadeIn}>
         <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
-          {initialLoad ? (
+          {state.initialLoad ? (
             <TableSkeleton />
           ) : (
             <>
@@ -672,45 +574,49 @@ const ProductTable = () => {
                 <Table>
                   <TableHead sx={{ bgcolor: colors.light }}>
                     <TableRow>
-                      <TableCell
-                        sx={{ fontWeight: 700, cursor: 'pointer' }}
-                        onClick={() => handleSort('name')}
-                      >
-                        Name <SortIndicator field="name" />
-                      </TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>
-                        Description
-                      </TableCell>
-                      <TableCell
-                        sx={{ fontWeight: 700, cursor: 'pointer' }}
-                        onClick={() => handleSort('price')}
-                      >
-                        Price <SortIndicator field="price" />
-                      </TableCell>
-                      <TableCell
-                        sx={{ fontWeight: 700, cursor: 'pointer' }}
-                        onClick={() => handleSort('stockQuantity')}
-                      >
-                        Stock <SortIndicator field="stockQuantity" />
-                      </TableCell>
-                      <TableCell
-                        sx={{ fontWeight: 700, cursor: 'pointer' }}
-                        onClick={() => handleSort('category')}
-                      >
-                        Category <SortIndicator field="category" />
-                      </TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Actions</TableCell>
+                      {[
+                        { field: 'name', label: 'Name' },
+                        { field: 'description', label: 'Description' },
+                        { field: 'price', label: 'Price' },
+                        { field: 'stockQuantity', label: 'Stock' },
+                        { field: 'category', label: 'Category' },
+                        { field: '', label: 'Actions' }
+                      ].map((header) => (
+                        <TableCell
+                          key={header.field}
+                          sx={{ 
+                            fontWeight: 700,
+                            cursor: header.field ? 'pointer' : 'default'
+                          }}
+                          onClick={() => {
+                            if (header.field) {
+                              setState(prev => ({
+                                ...prev,
+                                sortConfig: {
+                                  field: header.field,
+                                  direction: prev.sortConfig.field === header.field && 
+                                    prev.sortConfig.direction === 'asc' ? 'desc' : 'asc'
+                                },
+                                page: 0
+                              }));
+                            }
+                          }}
+                        >
+                          {header.label}
+                          {header.field && <SortIndicator field={header.field} />}
+                        </TableCell>
+                      ))}
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {loading && products.length === 0 ? (
+                    {state.loading && state.products.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} align="center">
                           <CircularProgress />
                         </TableCell>
                       </TableRow>
-                    ) : products.length > 0 ? (
-                      products.map((product) => (
+                    ) : state.products.length > 0 ? (
+                      state.products.map((product) => (
                         <TableRow
                           hover
                           key={product.id}
@@ -756,9 +662,9 @@ const ProductTable = () => {
                                   color="primary"
                                   onClick={() => handleOpenDialog(product)}
                                   size="small"
-                                  disabled={actionLoading.edit === product.id}
+                                  disabled={state.actionLoading.edit === product.id}
                                 >
-                                  {actionLoading.edit === product.id ? (
+                                  {state.actionLoading.edit === product.id ? (
                                     <CircularProgress size={24} />
                                   ) : (
                                     <Edit fontSize="small" />
@@ -770,9 +676,9 @@ const ProductTable = () => {
                                   color="error"
                                   onClick={() => handleDelete(product.id)}
                                   size="small"
-                                  disabled={actionLoading.delete === product.id}
+                                  disabled={state.actionLoading.delete === product.id}
                                 >
-                                  {actionLoading.delete === product.id ? (
+                                  {state.actionLoading.delete === product.id ? (
                                     <CircularProgress size={24} />
                                   ) : (
                                     <Delete fontSize="small" />
@@ -802,8 +708,11 @@ const ProductTable = () => {
                             <Button
                               variant="outlined"
                               onClick={() => {
-                                setSearchTerm('');
-                                setSelectedCategory('all');
+                                setState(prev => ({
+                                  ...prev,
+                                  searchTerm: '',
+                                  selectedCategory: 'all'
+                                }));
                               }}
                               sx={{ mt: 2 }}
                             >
@@ -832,8 +741,14 @@ const ProductTable = () => {
                     Rows per page:
                   </Typography>
                   <Select
-                    value={rowsPerPage}
-                    onChange={handleRowsPerPageChange}
+                    value={state.rowsPerPage}
+                    onChange={(e) => {
+                      setState(prev => ({
+                        ...prev,
+                        rowsPerPage: parseInt(e.target.value, 10),
+                        page: 0
+                      }));
+                    }}
                     size="small"
                     sx={{
                       borderRadius: 5,
@@ -852,16 +767,16 @@ const ProductTable = () => {
                   <Button
                     variant="outlined"
                     size="small"
-                    onClick={() => setPage(0)}
-                    disabled={page === 0}
+                    onClick={() => setState(prev => ({ ...prev, page: 0 }))}
+                    disabled={state.page === 0}
                     startIcon={<FirstPage />}
                     sx={{ minWidth: 32, borderRadius: 5 }}
                   />
                   <Button
                     variant="outlined"
                     size="small"
-                    onClick={() => setPage(Math.max(0, page - 1))}
-                    disabled={page === 0}
+                    onClick={() => setState(prev => ({ ...prev, page: Math.max(0, prev.page - 1) }))}
+                    disabled={state.page === 0}
                     startIcon={<ChevronLeft />}
                     sx={{ minWidth: 32, borderRadius: 5 }}
                   />
@@ -869,12 +784,12 @@ const ProductTable = () => {
                   {getPageNumbers().map((pageNumber) => (
                     <Button
                       key={pageNumber}
-                      variant={page === pageNumber ? 'contained' : 'outlined'}
+                      variant={state.page === pageNumber ? 'contained' : 'outlined'}
                       size="small"
-                      onClick={() => setPage(pageNumber)}
+                      onClick={() => setState(prev => ({ ...prev, page: pageNumber }))}
                       sx={{
                         minWidth: 32, borderRadius: 5,
-                        fontWeight: page === pageNumber ? 600 : 400
+                        fontWeight: state.page === pageNumber ? 600 : 400
                       }}
                     >
                       {pageNumber + 1}
@@ -884,16 +799,16 @@ const ProductTable = () => {
                   <Button
                     variant="outlined"
                     size="small"
-                    onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
-                    disabled={page >= totalPages - 1}
+                    onClick={() => setState(prev => ({ ...prev, page: Math.min(totalPages - 1, prev.page + 1) }))}
+                    disabled={state.page >= totalPages - 1}
                     startIcon={<ChevronRight />}
                     sx={{ minWidth: 32, borderRadius: 5 }}
                   />
                   <Button
                     variant="outlined"
                     size="small"
-                    onClick={() => setPage(totalPages - 1)}
-                    disabled={page >= totalPages - 1}
+                    onClick={() => setState(prev => ({ ...prev, page: totalPages - 1 }))}
+                    disabled={state.page >= totalPages - 1}
                     startIcon={<LastPage />}
                     sx={{ minWidth: 32, borderRadius: 5 }}
                   />
@@ -906,7 +821,7 @@ const ProductTable = () => {
 
       {/* Product Dialog */}
       <Dialog
-        open={openDialog}
+        open={state.openDialog}
         onClose={handleCloseDialog}
         fullWidth
         maxWidth="sm"
@@ -918,7 +833,7 @@ const ProductTable = () => {
           alignItems: 'center'
         }}>
           <Typography variant="h6" fontWeight={600}>
-            {currentProduct ? 'Edit Product' : 'Create New Product'}
+            {state.currentProduct ? 'Edit Product' : 'Create New Product'}
           </Typography>
           <IconButton onClick={handleCloseDialog}>
             <Close />
@@ -1017,8 +932,7 @@ const ProductTable = () => {
                   {categories.map((category) => (
                     <MenuItem key={category.value} value={category.value}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {React.cloneElement(category.icon, { fontSize: 'small' })}
-                        {category.value}
+                        {category.icon} {category.value}
                       </Box>
                     </MenuItem>
                   ))}
@@ -1029,14 +943,6 @@ const ProductTable = () => {
                   </Typography>
                 )}
               </FormControl>
-
-              {currentProduct && (
-                <Box sx={{ mt: 1 }}>
-                  <Typography variant="caption" color="textSecondary">
-                    Last updated: {new Date().toLocaleDateString()}
-                  </Typography>
-                </Box>
-              )}
             </Box>
           </DialogContent>
 
@@ -1057,8 +963,8 @@ const ProductTable = () => {
               type="submit"
               variant="contained"
               color="primary"
-              disabled={loading || !formik.isValid}
-              startIcon={loading ? <CircularProgress size={20} /> : <Save />}
+              disabled={state.loading || !formik.isValid}
+              startIcon={state.loading ? <CircularProgress size={20} /> : <Save />}
               sx={{
                 background: `linear-gradient(45deg, ${colors.primary}, ${colors.secondary})`,
                 boxShadow: `0 2px 6px ${colors.primary}30`,
@@ -1068,7 +974,7 @@ const ProductTable = () => {
                 }
               }}
             >
-              {loading ? 'Processing...' : 'Save Product'}
+              {state.loading ? 'Processing...' : 'Save Product'}
             </Button>
           </DialogActions>
         </form>

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Product.Data;
 using ProductApp.Models;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace ProductApp.Controllers
 {
@@ -17,7 +18,7 @@ namespace ProductApp.Controllers
             _context = context;
         }
 
-        // GET: api/Productss
+        // GET: api/Products
         [HttpGet]
         public async Task<IActionResult> GetProducts(
             int page = 1,
@@ -34,58 +35,30 @@ namespace ProductApp.Controllers
                 // Base query
                 var query = _context.Products.AsQueryable();
 
-                // Search filter
-                if (!string.IsNullOrEmpty(search))
-                {
-                    query = query.Where(p =>
-                        p.Name.Contains(search) ||
-                        p.Description.Contains(search) ||
-                        (p.Category != null && p.Category.Contains(search)) ||
-                        (p.Manufacturer != null && p.Manufacturer.Contains(search)));
-                }
+                // Apply filters
+                query = ApplyFilters(query, search, category, minPrice, maxPrice);
 
-                // Category filter
-                if (!string.IsNullOrEmpty(category))
-                {
-                    query = query.Where(p => p.Category == category);
-                }
-
-                // Price range filter
-                if (minPrice.HasValue)
-                {
-                    query = query.Where(p => p.Price >= minPrice.Value);
-                }
-
-                if (maxPrice.HasValue)
-                {
-                    query = query.Where(p => p.Price <= maxPrice.Value);
-                }
-
-                // Sorting
-                query = sortOrder.ToLower() == "desc" ?
-                    SortByDescending(query, sortColumn) :
-                    SortByAscending(query, sortColumn);
-
-                // Total count before pagination
+                // Get total count before pagination
                 var totalCount = await query.CountAsync();
 
-                // Pagination
-                var Products = await query
+                // Apply sorting
+                query = ApplySorting(query, sortColumn, sortOrder);
+
+                // Apply pagination
+                var products = await query
                     .Skip((page - 1) * pageSize)
                     .Take(pageSize)
                     .ToListAsync();
 
                 // Return response with pagination metadata
-                var response = new
+                return Ok(new
                 {
                     TotalCount = totalCount,
                     Page = page,
                     PageSize = pageSize,
                     TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
-                    Data = Products
-                };
-
-                return Ok(response);
+                    Data = products
+                });
             }
             catch (Exception ex)
             {
@@ -93,72 +66,86 @@ namespace ProductApp.Controllers
             }
         }
 
-        private IQueryable<Products> SortByAscending(IQueryable<Products> query, string sortColumn)
+        // GET: api/Products/Stats/Summary
+        [HttpGet("Stats/Summary")]
+        public async Task<IActionResult> GetProductsSummary()
         {
-            switch (sortColumn.ToLower())
+            try
             {
-                case "name":
-                    return query.OrderBy(p => p.Name);
-                case "description":
-                    return query.OrderBy(p => p.Description);
-                case "price":
-                    return query.OrderBy(p => p.Price);
-                case "stockquantity":
-                    return query.OrderBy(p => p.StockQuantity);
-                case "category":
-                    return query.OrderBy(p => p.Category);
-                case "manufacturer":
-                    return query.OrderBy(p => p.Manufacturer);
-                default:
-                    return query.OrderBy(p => p.Name);
+                var stats = await _context.Products
+                    .GroupBy(x => 1) // Single group for all products
+                    .Select(g => new
+                    {
+                        TotalProducts = g.Count(),
+                        TotalValue = g.Sum(p => p.Price * p.StockQuantity),
+                        TotalStock = g.Sum(p => p.StockQuantity),
+                        TotalCategories = g.Select(p => p.Category).Distinct().Count()
+                    })
+                    .FirstOrDefaultAsync();
+
+                return Ok(stats ?? new
+                {
+                    TotalProducts = 0,
+                    TotalValue = 0m,
+                    TotalStock = 0,
+                    TotalCategories = 0
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Internal server error: {ex.Message}");
             }
         }
 
-        private IQueryable<Products> SortByDescending(IQueryable<Products> query, string sortColumn)
+        // GET: api/Products/Stats/ByCategory
+        [HttpGet("Stats/ByCategory")]
+        public async Task<IActionResult> GetStatsByCategory()
         {
-            switch (sortColumn.ToLower())
+            try
             {
-                case "name":
-                    return query.OrderByDescending(p => p.Name);
-                case "description":
-                    return query.OrderByDescending(p => p.Description);
-                case "price":
-                    return query.OrderByDescending(p => p.Price);
-                case "stockquantity":
-                    return query.OrderByDescending(p => p.StockQuantity);
-                case "category":
-                    return query.OrderByDescending(p => p.Category);
-                case "manufacturer":
-                    return query.OrderByDescending(p => p.Manufacturer);
-                default:
-                    return query.OrderByDescending(p => p.Name);
+                var categoryStats = await _context.Products
+                    .GroupBy(p => p.Category)
+                    .Select(g => new
+                    {
+                        Category = g.Key,
+                        Count = g.Count(),
+                        TotalValue = g.Sum(p => p.Price * p.StockQuantity),
+                        TotalStock = g.Sum(p => p.StockQuantity),
+                        AvgPrice = g.Average(p => p.Price)
+                    })
+                    .OrderByDescending(x => x.TotalValue)
+                    .ToListAsync();
+
+                return Ok(categoryStats);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Internal server error: {ex.Message}");
             }
         }
 
-        // GET: api/Productss/5
+        // GET: api/Products/5
         [HttpGet("{id}")]
         public async Task<ActionResult<Products>> GetProduct(int id)
         {
-            var Products = await _context.Products.FindAsync(id);
-
-            if (Products == null)
+            var product = await _context.Products.FindAsync(id);
+            if (product == null)
             {
                 return NotFound();
             }
-
-            return Products;
+            return product;
         }
 
-        // PUT: api/Productss/5
+        // PUT: api/Products/5
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutProduct(int id, Products Products)
+        public async Task<IActionResult> PutProduct(int id, Products product)
         {
-            if (id != Products.Id)
+            if (id != product.Id)
             {
                 return BadRequest();
             }
 
-            _context.Entry(Products).State = EntityState.Modified;
+            _context.Entry(product).State = EntityState.Modified;
 
             try
             {
@@ -166,7 +153,7 @@ namespace ProductApp.Controllers
             }
             catch (DbUpdateConcurrencyException)
             {
-                if (!ProductsExists(id))
+                if (!ProductExists(id))
                 {
                     return NotFound();
                 }
@@ -179,33 +166,33 @@ namespace ProductApp.Controllers
             return NoContent();
         }
 
-        // POST: api/Productss
+        // POST: api/Products
         [HttpPost]
-        public async Task<ActionResult<Products>> PostProducts(Products Products)
+        public async Task<ActionResult<Products>> PostProduct(Products product)
         {
-            _context.Products.Add(Products);
+            _context.Products.Add(product);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetProducts", new { id = Products.Id }, Products);
+            return CreatedAtAction("GetProduct", new { id = product.Id }, product);
         }
 
-        // DELETE: api/Productss/5
+        // DELETE: api/Products/5
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteProducts(int id)
+        public async Task<IActionResult> DeleteProduct(int id)
         {
-            var Products = await _context.Products.FindAsync(id);
-            if (Products == null)
+            var product = await _context.Products.FindAsync(id);
+            if (product == null)
             {
                 return NotFound();
             }
 
-            _context.Products.Remove(Products);
+            _context.Products.Remove(product);
             await _context.SaveChangesAsync();
 
             return NoContent();
         }
 
-        // GET: api/Productss/Categories
+        // GET: api/Products/Categories
         [HttpGet("Categories")]
         public async Task<ActionResult<IEnumerable<string>>> GetCategories()
         {
@@ -215,9 +202,65 @@ namespace ProductApp.Controllers
                 .ToListAsync();
         }
 
-        private bool ProductsExists(int id)
+        private bool ProductExists(int id)
         {
             return _context.Products.Any(e => e.Id == id);
+        }
+
+        private IQueryable<Products> ApplyFilters(
+            IQueryable<Products> query,
+            string search,
+            string category,
+            decimal? minPrice,
+            decimal? maxPrice)
+        {
+            if (!string.IsNullOrEmpty(search))
+            {
+                query = query.Where(p =>
+                    p.Name.Contains(search) ||
+                    p.Description.Contains(search) ||
+                    (p.Category != null && p.Category.Contains(search)) ||
+                    (p.Manufacturer != null && p.Manufacturer.Contains(search)));
+            }
+
+            if (!string.IsNullOrEmpty(category))
+            {
+                query = query.Where(p => p.Category == category);
+            }
+
+            if (minPrice.HasValue)
+            {
+                query = query.Where(p => p.Price >= minPrice.Value);
+            }
+
+            if (maxPrice.HasValue)
+            {
+                query = query.Where(p => p.Price <= maxPrice.Value);
+            }
+
+            return query;
+        }
+
+        private IQueryable<Products> ApplySorting(
+            IQueryable<Products> query,
+            string sortColumn,
+            string sortOrder)
+        {
+            return (sortColumn.ToLower(), sortOrder.ToLower()) switch
+            {
+                ("name", "desc") => query.OrderByDescending(p => p.Name),
+                ("description", "asc") => query.OrderBy(p => p.Description),
+                ("description", "desc") => query.OrderByDescending(p => p.Description),
+                ("price", "asc") => query.OrderBy(p => p.Price),
+                ("price", "desc") => query.OrderByDescending(p => p.Price),
+                ("stockquantity", "asc") => query.OrderBy(p => p.StockQuantity),
+                ("stockquantity", "desc") => query.OrderByDescending(p => p.StockQuantity),
+                ("category", "asc") => query.OrderBy(p => p.Category),
+                ("category", "desc") => query.OrderByDescending(p => p.Category),
+                ("manufacturer", "asc") => query.OrderBy(p => p.Manufacturer),
+                ("manufacturer", "desc") => query.OrderByDescending(p => p.Manufacturer),
+                _ => query.OrderBy(p => p.Name) // Default sort
+            };
         }
     }
 }
